@@ -22,6 +22,10 @@ package com.android.volley;
  * @param <T> Parsed type of this response
  */
 public class Response<T> {
+	
+	public interface ProcessListener<T> {
+		public void onProcess(T response);
+	}
 
     /** Callback interface for delivering parsed responses. */
     public interface Listener<T> {

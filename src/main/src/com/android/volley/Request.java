@@ -23,11 +23,19 @@ import android.os.Looper;
 import android.text.TextUtils;
 
 import com.android.volley.VolleyLog.MarkerLog;
+import com.android.volley.toolbox.ByteArrayPool;
+import com.android.volley.toolbox.PoolingByteArrayOutputStream;
+import com.android.volley.toolbox.VolleyUtils;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.Collections;
 import java.util.Map;
+
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
 
 /**
  * Base class for all network requests.
@@ -571,6 +579,50 @@ public abstract class Request<T> implements Comparable<Request<T>> {
      * {@link #parseNetworkResponse(NetworkResponse)}
      */
     abstract protected void deliverResponse(T response);
+    
+    public void deliverProcess(long fileSize, long downloadSize){
+    	
+    }
+    
+    public long getDownloadedSize(){
+    	return 0;
+    }
+    
+    public byte[] handleResponseData(HttpResponse response) throws ServerError, IOException {
+		if (response.getEntity() != null) {
+			HttpEntity entity = response.getEntity();
+			ByteArrayPool pool = new ByteArrayPool(1024 * 10);
+			PoolingByteArrayOutputStream bytes =
+		            new PoolingByteArrayOutputStream(pool, (int) entity.getContentLength());
+		    byte[] buffer = null;
+		    try {
+		        InputStream in = entity.getContent();
+		        if (in == null) {
+		            throw new ServerError();
+		        }
+		        buffer = pool.getBuf(1024);
+		        int count;
+		        while ((count = in.read(buffer)) != -1) {
+		            bytes.write(buffer, 0, count);
+		            deliverProcess(entity.getContentLength(), getDownloadedSize() + count);
+		        }
+		        return bytes.toByteArray();
+		    } finally {
+		        try {
+		            // Close the InputStream and release the resources by "consuming the content".
+		            entity.consumeContent();
+		        } catch (IOException e) {
+		            // This can happen if there was an exception above that left the entity in
+		            // an invalid state.
+		            VolleyLog.v("Error occured when calling consumingContent");
+		        }
+		        pool.returnBuf(buffer);
+		        bytes.close();
+		    }
+		} else {
+			return new byte[0];
+		}
+    }
 
     /**
      * Delivers error message to the ErrorListener that the Request was
